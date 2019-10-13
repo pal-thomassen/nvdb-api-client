@@ -30,40 +30,38 @@ import com.google.gson.JsonElement;
 import no.vegvesen.nvdbapi.client.clients.util.JerseyHelper;
 import no.vegvesen.nvdbapi.client.gson.PlacementParser;
 import no.vegvesen.nvdbapi.client.model.Position;
-
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.WebTarget;
-import javax.ws.rs.core.UriBuilder;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import static no.vegvesen.nvdbapi.client.gson.GsonUtil.rt;
+import static org.apache.hc.core5.http.io.support.ClassicRequestBuilder.get;
 
 public class PositionClient extends AbstractJerseyClient {
 
-    public PositionClient(String baseurl, Client client) {
-        super(baseurl, client);
+    public PositionClient(HttpHost baseUrl, HttpClient client) {
+        super(baseUrl, client);
     }
 
     public Position getPlacement(PositionRequest req) {
-        UriBuilder url = getPositionEndpoint();
+        ClassicRequestBuilder builder = get("/posisjon");
 
-        req.getNorth().ifPresent(v -> url.queryParam("nord", v));
-        req.getEast().ifPresent(v -> url.queryParam("ost", v));
-        req.getLat().ifPresent(v -> url.queryParam("lat", v));
-        req.getLon().ifPresent(v -> url.queryParam("lon", v));
-        req.getProjection().ifPresent(v -> url.queryParam("srid", v.getSrid()));
-        req.getMaxResults().ifPresent(v -> url.queryParam("maks_antall", v));
-        req.getMaxDistance().ifPresent(v -> url.queryParam("maks_avstand", v));
-        req.getConnectionLinks().ifPresent(v -> url.queryParam("konnekteringslenker", v));
-        req.getDetailedLinks().ifPresent(v -> url.queryParam("detaljerte_lenker", v));
-        req.getRoadRefFilters().ifPresent(v -> url.queryParam("vegsystemreferanse", v));
+        req.getNorth().ifPresent(v -> builder.addParameter("nord", String.valueOf(v)));
+        req.getEast().ifPresent(v -> builder.addParameter("ost", String.valueOf(v)));
+        req.getLat().ifPresent(v -> builder.addParameter("lat", String.valueOf(v)));
+        req.getLon().ifPresent(v -> builder.addParameter("lon", String.valueOf(v)));
+        req.getProjection().ifPresent(v -> builder.addParameter("srid", String.valueOf(v.getSrid())));
+        req.getMaxResults().ifPresent(v -> builder.addParameter("maks_antall", String.valueOf(v)));
+        req.getMaxDistance().ifPresent(v -> builder.addParameter("maks_avstand", String.valueOf(v)));
+        req.getConnectionLinks().ifPresent(v -> builder.addParameter("konnekteringslenker", String.valueOf(v)));
+        req.getDetailedLinks().ifPresent(v -> builder.addParameter("detaljerte_lenker", String.valueOf(v)));
+        req.getRoadRefFilters().ifPresent(v -> builder.addParameter("vegsystemreferanse", v));
 
-        WebTarget target = getClient().target(url);
-
-        JsonArray results = JerseyHelper.execute(target).getAsJsonArray();
+        JsonArray results = JerseyHelper.execute(getClient(), start(), builder).getAsJsonArray();
 
         List<Position.Result> collect =
                 StreamSupport.stream(results.spliterator(), false)
@@ -72,14 +70,5 @@ public class PositionClient extends AbstractJerseyClient {
                              .collect(Collectors.toList());
         return new Position(collect);
     }
-
-    private UriBuilder getPositionEndpoint() {
-        return rootEndpoint().path("posisjon");
-    }
-
-    private UriBuilder rootEndpoint() {
-        return start();
-    }
-
 
 }
