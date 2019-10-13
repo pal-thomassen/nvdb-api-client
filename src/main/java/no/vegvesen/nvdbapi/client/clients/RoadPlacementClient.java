@@ -101,7 +101,7 @@ public class RoadPlacementClient extends AbstractJerseyClient {
 
         WebTarget target = getClient().target(url);
 
-        return JerseyHelper.executeOptional(target)
+        return JerseyHelper.executeOptional(getClient(), start(), target)
                 .map(JsonElement::getAsJsonObject)
                 .map(rt(RoadPlacementParser::parseRoadPlacement));
     }

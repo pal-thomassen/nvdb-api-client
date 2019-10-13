@@ -102,25 +102,26 @@ public class JerseyHelper {
         }
     }
 
-    public static Optional<JsonElement> executeOptional(WebTarget target) {
-        Invocation inv = target.request().buildGet();
-        try(Response response = execute(inv, Response.class)) {
+    public static Optional<JsonElement> executeOptional(HttpClient client, HttpHost start, ClassicRequestBuilder target) {
+        try(ClassicHttpResponse response = client.execute(start, target.build())) {
 
             if (!isSuccess(response)) {
-                if (response.getStatus() == 404) {
+                if (response.getCode() == 404) {
                     return Optional.empty();
                 }
                 throw parseError(response);
             }
 
-            if (response.getStatus() == 204) {
+            if (response.getCode() == 204) {
                 return Optional.empty();
             }
-            try (InputStream is = response.readEntity(InputStream.class)) {
-                return Optional.of(new JsonParser().parse(new InputStreamReader(is, StandardCharsets.UTF_8)));
+            try (InputStream is = response.getEntity().getContent()) {
+                return Optional.of(JsonParser.parseReader(new InputStreamReader(is, StandardCharsets.UTF_8)));
             } catch (Exception e) {
                 throw new RuntimeException("Error parsing response", e);
             }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 
