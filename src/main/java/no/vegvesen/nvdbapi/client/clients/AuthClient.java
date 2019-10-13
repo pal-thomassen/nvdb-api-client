@@ -1,29 +1,29 @@
 package no.vegvesen.nvdbapi.client.clients;
 
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.Entity;
-import javax.ws.rs.client.WebTarget;
-import javax.ws.rs.core.UriBuilder;
+import com.google.gson.Gson;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import static java.util.Collections.singletonMap;
-import static javax.ws.rs.core.MediaType.APPLICATION_JSON_TYPE;
 
 class AuthClient extends AbstractJerseyClient {
-    protected AuthClient(String baseUrl, Client client) {
+    protected AuthClient(String baseUrl, HttpClient client) {
         super(baseUrl, client);
     }
 
     public Login login(String username, String password) {
-        UriBuilder path = start()
-            .path("auth")
-            .path("login");
-        WebTarget target = getClient().target(path);
-        try {
-            Login.AuthTokens authTokens = target.request()
-                .post(Entity.entity(credentialsJson(username, password), APPLICATION_JSON_TYPE), Login.AuthTokens.class);
+        Gson gson = new Gson();
+        HttpPost post = new HttpPost("/auth/login");
+        post.setEntity(new StringEntity(gson.toJson(credentialsJson(username, password)), ContentType.APPLICATION_JSON));
+        try ( ClassicHttpResponse response = getClient().execute(start(), post) ){
+            Login.AuthTokens authTokens = gson.fromJson(EntityUtils.toString(response.getEntity()), Login.AuthTokens.class);
             return Login.success(authTokens);
         } catch (Exception e) {
             return Login.failed(e.getMessage());
@@ -32,13 +32,11 @@ class AuthClient extends AbstractJerseyClient {
 
 
     public Login refresh(String refreshToken) {
-        UriBuilder path = start()
-            .path("auth")
-            .path("refresh");
-        WebTarget target = getClient().target(path);
-        try {
-            Login.AuthTokens authTokens = target.request()
-                .post(Entity.entity(refreshJson(refreshToken), APPLICATION_JSON_TYPE), Login.AuthTokens.class);
+        Gson gson = new Gson();
+        HttpPost post = new HttpPost("/auth/refresh");
+        post.setEntity(new StringEntity(gson.toJson(refreshJson(refreshToken)), ContentType.APPLICATION_JSON));
+        try ( ClassicHttpResponse response = getClient().execute(start(), post) ){
+            Login.AuthTokens authTokens = gson.fromJson(EntityUtils.toString(response.getEntity()), Login.AuthTokens.class);
             return Login.success(authTokens);
         } catch (Exception e) {
             return Login.failed(e.getMessage());

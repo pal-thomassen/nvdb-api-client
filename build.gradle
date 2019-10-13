@@ -21,9 +21,7 @@ dependencies {
     api "com.google.code.gson:gson:2.8.6"
     api "org.slf4j:slf4j-api:1.7.25"
 
-    implementation "org.glassfish.jersey.core:jersey-client:2.29.1"
-    implementation "org.glassfish.jersey.connectors:jersey-apache-connector:2.29.1"
-    implementation "org.glassfish.jersey.inject:jersey-hk2:2.29.1"
+    implementation "org.apache.httpcomponents.client5:httpclient5:5.0-beta5"
     api "io.projectreactor:reactor-core:3.2.6.RELEASE"
 
     testRuntime "org.junit.jupiter:junit-jupiter-engine:5.5.2"

@@ -27,36 +27,33 @@ package no.vegvesen.nvdbapi.client.clients;
 
 import com.google.gson.Gson;
 import no.vegvesen.nvdbapi.client.util.Strings;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.core5.http.HttpHost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.client.Client;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.UriBuilder;
-import java.io.Serializable;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
-abstract class AbstractJerseyClient implements AutoCloseable, Serializable {
+abstract class AbstractJerseyClient {
     private final Logger log = LoggerFactory.getLogger(getClass());
     private final String baseUrl;
-    private final Client client;
-    private boolean isClosed;
+    private final HttpClient client;
 
-    protected AbstractJerseyClient(String baseUrl, Client client) {
+    protected AbstractJerseyClient(String baseUrl, HttpClient client) {
         this.baseUrl = baseUrl;
         this.client = client;
     }
 
-    protected Client getClient() {
+    protected HttpClient getClient() {
         return client;
     }
 
-    protected UriBuilder start() {
-        return UriBuilder.fromUri(baseUrl);
+    protected HttpHost start() {
+        return new HttpHost(baseUrl);
     }
 
     protected void logEntity(Object obj) {
@@ -111,12 +108,4 @@ abstract class AbstractJerseyClient implements AutoCloseable, Serializable {
         return isClosed;
     }
 
-    @Override
-    public void close() throws Exception {
-        if (isClosed) {
-            return;
-        }
-        client.close();
-        isClosed = true;
-    }
 }

@@ -26,22 +26,20 @@
 package no.vegvesen.nvdbapi.client.clients;
 
 import no.vegvesen.nvdbapi.client.ProxyConfig;
-import no.vegvesen.nvdbapi.client.clients.filters.RequestHeaderFilter;
-import no.vegvesen.nvdbapi.client.gson.GsonMessageBodyHandler;
 import no.vegvesen.nvdbapi.client.model.datakatalog.Datakatalog;
-import no.vegvesen.nvdbapi.client.util.LoggingFilter;
-import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
-import org.glassfish.jersey.apache.connector.ApacheClientProperties;
-import org.glassfish.jersey.apache.connector.ApacheConnectorProvider;
-import org.glassfish.jersey.client.ClientConfig;
-import org.glassfish.jersey.client.ClientProperties;
-import org.glassfish.jersey.message.DeflateEncoder;
-import org.glassfish.jersey.message.GZipEncoder;
+import org.apache.hc.client5.http.auth.AuthScope;
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.message.BasicHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.ClientBuilder;
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -52,6 +50,7 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 
 import static java.nio.file.StandardOpenOption.CREATE;
+import static java.util.Arrays.asList;
 import static java.util.Objects.isNull;
 
 public final class ClientFactory implements AutoCloseable {
@@ -65,9 +64,9 @@ public final class ClientFactory implements AutoCloseable {
 
     private Datakatalog datakatalog;
     private List<AbstractJerseyClient> clients;
+    private final CloseableHttpClient httpclient;
     private boolean isClosed;
     private final Logger debugLogger;
-    private PoolingHttpClientConnectionManager connectionManager;
     private Login.AuthTokens authTokens;
 
     /**
@@ -103,8 +102,34 @@ public final class ClientFactory implements AutoCloseable {
         this.userAgent = getUserAgent();
         this.debugLogger = LoggerFactory.getLogger("no.vegvesen.nvdbapi.Client");
         this.clients = new ArrayList<>();
-        this.connectionManager = new PoolingHttpClientConnectionManager();
         this.proxyConfig = proxyConfig;
+        PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
+        HttpClientBuilder builder = HttpClients.custom()
+                .setConnectionManager(cm)
+                .setDefaultHeaders(
+                        asList(
+                                new BasicHeader("X-Client", xClientName),
+                                new BasicHeader("X-Client-Session", getOrCreateSessionId()),
+                                new BasicHeader(HttpHeaders.ACCEPT, apiRevision)
+                        )
+                )
+                .setUserAgent(getUserAgent());
+        if(proxyConfig != null) {
+            HttpHost proxy = new HttpHost(proxyConfig.getUrl());
+            builder.setProxy(proxy);
+            if(proxyConfig.hasCredentials()) {
+                BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
+                credsProvider.setCredentials(
+                        new AuthScope(proxy),
+                        new UsernamePasswordCredentials(proxyConfig.getUsername(), proxyConfig.getPassword().toCharArray()));
+            }
+        }
+        builder.addRequestInterceptorFirst((httpRequest, entityDetails, httpContext) -> {
+            if(authTokens != null) {
+                httpRequest.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + authTokens.idToken);
+            }
+        });
+        httpclient = builder.build();
     }
 
     private String getUserAgent() {
@@ -149,7 +174,7 @@ public final class ClientFactory implements AutoCloseable {
             .map(AuthClient.class::cast)
             .findFirst()
             .orElseGet(() -> {
-                AuthClient client = new AuthClient(baseUrl, createClient());
+                AuthClient client = new AuthClient(baseUrl, httpclient);
                 clients.add(client);
                 return client;
             });
@@ -188,21 +213,21 @@ public final class ClientFactory implements AutoCloseable {
 
     public RoadNetClient createRoadNetService() {
         assertIsOpen();
-        RoadNetClient c = new RoadNetClient(baseUrl, createClient(getDatakatalog().getVersion().getVersion()));
+        RoadNetClient c = new RoadNetClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
 
     public SegmentedRoadNetClient createSegmentedRoadNetService() {
         assertIsOpen();
-        SegmentedRoadNetClient c = new SegmentedRoadNetClient(baseUrl, createClient(getDatakatalog().getVersion().getVersion()));
+        SegmentedRoadNetClient c = new SegmentedRoadNetClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
 
     public RoadNetRouteClient createRoadNetRouteClient() {
         assertIsOpen();
-        RoadNetRouteClient c = new RoadNetRouteClient(baseUrl, createClient(getDatakatalog().getVersion().getVersion()));
+        RoadNetRouteClient c = new RoadNetRouteClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
@@ -215,7 +240,7 @@ public final class ClientFactory implements AutoCloseable {
 
     public DatakatalogClient createDatakatalogClient() {
         assertIsOpen();
-        DatakatalogClient c = new DatakatalogClient(baseUrl, createClient());
+        DatakatalogClient c = new DatakatalogClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
@@ -229,7 +254,7 @@ public final class ClientFactory implements AutoCloseable {
 
     public AreaClient createAreaClient() {
         assertIsOpen();
-        AreaClient c = new AreaClient(baseUrl, createClient(getDatakatalog().getVersion().getVersion()));
+        AreaClient c = new AreaClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
@@ -240,7 +265,7 @@ public final class ClientFactory implements AutoCloseable {
         RoadObjectClient c =
             new RoadObjectClient(
                 baseUrl,
-                createClient(datakatalog.getVersion().getVersion()),
+                    httpclient,
                 datakatalog);
         clients.add(c);
         return c;
@@ -248,76 +273,35 @@ public final class ClientFactory implements AutoCloseable {
 
     public PositionClient createPlacementClient() {
         assertIsOpen();
-        PositionClient c = new PositionClient(baseUrl, createClient(getDatakatalog().getVersion().getVersion()));
+        PositionClient c = new PositionClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
 
     public RoadPlacementClient createRoadPlacementClient() {
         assertIsOpen();
-        RoadPlacementClient c = new RoadPlacementClient(baseUrl, createClient(getDatakatalog().getVersion().getVersion()));
+        RoadPlacementClient c = new RoadPlacementClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
 
     public StatusClient createStatusClient() {
         assertIsOpen();
-        StatusClient c = new StatusClient(baseUrl, createClient());
+        StatusClient c = new StatusClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
 
     public TransactionsClient createTransactionsClient(){
         assertIsOpen();
-        TransactionsClient c = new TransactionsClient(baseUrl, createClient());
+        TransactionsClient c = new TransactionsClient(baseUrl, httpclient);
         clients.add(c);
         return c;
     }
 
-    private Client createClient() {
-        return createClient(null);
-    }
-
-    private Client createClient(String datakatalogVersion) {
-        ClientConfig config = new ClientConfig();
-        config.register(GZipEncoder.class);
-        config.register(DeflateEncoder.class);
-        if (debugLogger != null) {
-            config.register(new LoggingFilter(debugLogger, true));
-        }
-        config.connectorProvider(new ApacheConnectorProvider());
-
-        config.property(ApacheClientProperties.CONNECTION_MANAGER, connectionManager);
-        config.register(GsonMessageBodyHandler.class);
-        config.register(
-            new RequestHeaderFilter(
-                userAgent,
-                xClientName,
-                xSession,
-                datakatalogVersion,
-                apiRevision,
-                authTokens));
-
-        if (proxyConfig != null) {
-            config.property(ClientProperties.PROXY_URI, proxyConfig.getUrl());
-            if (proxyConfig.hasCredentials()) {
-                config.property(ClientProperties.PROXY_USERNAME, proxyConfig.getUsername());
-                config.property(ClientProperties.PROXY_PASSWORD, proxyConfig.getPassword());
-            }
-        }
-        return ClientBuilder.newBuilder().withConfig(config).build();
-    }
-
     @Override
     public void close() throws Exception {
-        if (!clients.isEmpty()) {
-            for (AbstractJerseyClient client : clients) {
-                if (!client.isClosed()) {
-                    client.close();
-                }
-            }
-        }
-        connectionManager.close();
+        httpclient.close();
         isClosed = true;
     }
 
