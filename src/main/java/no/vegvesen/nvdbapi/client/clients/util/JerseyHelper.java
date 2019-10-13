@@ -30,6 +30,13 @@ import com.google.gson.JsonParser;
 import no.vegvesen.nvdbapi.client.exceptions.ApiError;
 import no.vegvesen.nvdbapi.client.exceptions.ClientException;
 import no.vegvesen.nvdbapi.client.exceptions.JsonExceptionParser;
+import org.apache.commons.codec.Charsets;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.ParseException;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +45,7 @@ import javax.ws.rs.client.Invocation;
 import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.GenericType;
 import javax.ws.rs.core.Response;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -50,13 +58,13 @@ public class JerseyHelper {
 
     private JerseyHelper() {}
 
-    public static boolean isSuccess(Response response) {
-        return 200 <= response.getStatus() && response.getStatus() < 300;
+    public static boolean isSuccess(ClassicHttpResponse response) {
+        return 200 <= response.getCode() && response.getCode() < 300;
     }
 
-    public static ClientException parseError(Response response) {
-        List<ApiError> errors = JsonExceptionParser.parse(response.readEntity(String.class));
-        return new ClientException(response.getStatus(), errors);
+    public static ClientException parseError(ClassicHttpResponse response) throws IOException, ParseException {
+        List<ApiError> errors = JsonExceptionParser.parse(EntityUtils.toString(response.getEntity()));
+        return new ClientException(response.getCode(), errors);
     }
 
     public static <T> T execute(Invocation inv, Class<T> responseClass) {
@@ -115,4 +123,16 @@ public class JerseyHelper {
             }
         }
     }
+
+    public static JsonElement execute(HttpClient client, HttpHost start, ClassicRequestBuilder target) {
+        try (ClassicHttpResponse response = client.execute(start, target.build())) {
+            if (!isSuccess(response)) {
+                throw parseError(response);
+            }
+            return JsonParser.parseReader(new InputStreamReader(response.getEntity().getContent(), Charsets.UTF_8));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }

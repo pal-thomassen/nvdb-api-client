@@ -5,6 +5,7 @@ import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 
@@ -14,7 +15,7 @@ import java.util.Map;
 import static java.util.Collections.singletonMap;
 
 class AuthClient extends AbstractJerseyClient {
-    protected AuthClient(String baseUrl, HttpClient client) {
+    protected AuthClient(HttpHost baseUrl, HttpClient client) {
         super(baseUrl, client);
     }
 

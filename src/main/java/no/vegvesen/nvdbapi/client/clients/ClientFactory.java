@@ -54,13 +54,9 @@ import static java.util.Arrays.asList;
 import static java.util.Objects.isNull;
 
 public final class ClientFactory implements AutoCloseable {
-    private final String baseUrl;
-    private final String userAgent;
-    private final String xClientName;
-    private final String xSession;
+    private final HttpHost baseUrl;
 
     private static final String apiRevision = "application/vnd.vegvesen.nvdb-v3-rev1+json";
-    private final ProxyConfig proxyConfig;
 
     private Datakatalog datakatalog;
     private List<AbstractJerseyClient> clients;
@@ -96,13 +92,9 @@ public final class ClientFactory implements AutoCloseable {
      * @param proxyConfig - Config if traffic have to go through proxy.
      */
     public ClientFactory(String baseUrl, String xClientName, String xSession, ProxyConfig proxyConfig) {
-        this.baseUrl = baseUrl;
-        this.xClientName = xClientName;
-        this.xSession = Optional.ofNullable(xSession).orElseGet(this::getOrCreateSessionId);
-        this.userAgent = getUserAgent();
+        this.baseUrl = new HttpHost(baseUrl);
         this.debugLogger = LoggerFactory.getLogger("no.vegvesen.nvdbapi.Client");
         this.clients = new ArrayList<>();
-        this.proxyConfig = proxyConfig;
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         HttpClientBuilder builder = HttpClients.custom()
                 .setConnectionManager(cm)

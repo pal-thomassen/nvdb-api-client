@@ -32,10 +32,10 @@ import no.vegvesen.nvdbapi.client.clients.util.JerseyHelper;
 import no.vegvesen.nvdbapi.client.gson.AreaParser;
 import no.vegvesen.nvdbapi.client.model.Projection;
 import no.vegvesen.nvdbapi.client.model.areas.*;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.WebTarget;
-import javax.ws.rs.core.UriBuilder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -43,17 +43,16 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static no.vegvesen.nvdbapi.client.gson.GsonUtil.rt;
+import static org.apache.hc.core5.http.io.support.ClassicRequestBuilder.get;
 
 public class AreaClient extends AbstractJerseyClient {
 
-    protected AreaClient(String baseUrl, Client client) {
+    protected AreaClient(HttpHost baseUrl, HttpClient client) {
         super(baseUrl, client);
     }
 
     public List<Municipality> getMunicipalities(boolean includeBoundingBox, boolean includeCenterPoint, boolean includeObjectLink, Projection projection) {
-        WebTarget target = getClient().target(areaRoot().path("kommuner"));
-
-        return getAreas(includeBoundingBox, includeCenterPoint, includeObjectLink, projection, target)
+        return getAreas(includeBoundingBox, includeCenterPoint, includeObjectLink, projection, get("omrader/kommuner"))
             .map(rt(AreaParser::parseMun))
             .collect(Collectors.toList());
     }
@@ -63,9 +62,7 @@ public class AreaClient extends AbstractJerseyClient {
     }
 
     public List<County> getCountys(boolean includeBoundingBox, boolean includeCenterPoint, boolean includeObjectLink, Projection projection) {
-        WebTarget target = getClient().target(areaRoot().path("fylker"));
-
-        return getAreas(includeBoundingBox, includeCenterPoint, includeObjectLink, projection, target)
+        return getAreas(includeBoundingBox, includeCenterPoint, includeObjectLink, projection, get("omrader/fylker"))
             .map(rt(AreaParser::parseCounty))
             .collect(Collectors.toList());
     }
@@ -75,13 +72,11 @@ public class AreaClient extends AbstractJerseyClient {
     }
 
     public List<Route> getNationalRoutes(boolean includeObjectLink) {
-        UriBuilder path = areaRoot().path("riksvegruter");
+        ClassicRequestBuilder builder = get("omrader/riksvegruter");
 
-        if (includeObjectLink) path.queryParam("inkluder", getIncludeParameter(false, false, true));
+        if (includeObjectLink) builder.addParameter("inkluder", getIncludeParameter(false, false, true));
 
-        WebTarget target = getClient().target(path);
-
-        return getAreas(target)
+        return getAreas(builder)
             .map(rt(AreaParser::parseRoute))
             .collect(Collectors.toList());
     }
@@ -91,13 +86,11 @@ public class AreaClient extends AbstractJerseyClient {
     }
 
     public List<ContractArea> getContractAreas(boolean includeObjectLink) {
-        UriBuilder path = areaRoot().path("kontraktsomrader");
+        ClassicRequestBuilder builder = get("omrader/kontraktsomrader");
 
-        if (includeObjectLink) path.queryParam("inkluder", getIncludeParameter(false, false, true));
+        if (includeObjectLink) builder.addParameter("inkluder", getIncludeParameter(false, false, true));
 
-        WebTarget target = getClient().target(path);
-
-        return getAreas(target)
+        return getAreas(builder)
             .map(rt(AreaParser::parseContractArea))
             .collect(Collectors.toList());
     }
@@ -106,20 +99,23 @@ public class AreaClient extends AbstractJerseyClient {
         return getContractAreas(false);
     }
 
-    private Stream<JsonObject> getAreas(boolean includeBoundingBox, boolean includeCenterPoint, boolean includeObjectLink, Projection projection, WebTarget target) {
+    private Stream<JsonObject> getAreas(boolean includeBoundingBox,
+                                        boolean includeCenterPoint,
+                                        boolean includeObjectLink,
+                                        Projection projection, ClassicRequestBuilder target) {
         if (projection != null) {
-            target = target.queryParam("srid", projection.getSrid());
+            target = target.addParameter("srid", String.valueOf(projection.getSrid()));
         }
 
         if (includeCenterPoint || includeBoundingBox || includeObjectLink) {
-            target = target.queryParam("inkluder", getIncludeParameter(includeBoundingBox, includeCenterPoint, includeObjectLink));
+            target = target.addParameter("inkluder", getIncludeParameter(includeBoundingBox, includeCenterPoint, includeObjectLink));
         }
 
         return getAreas(target);
     }
 
-    private Stream<JsonObject> getAreas(WebTarget target) {
-        JsonElement e = JerseyHelper.execute(target);
+    private Stream<JsonObject> getAreas(ClassicRequestBuilder target) {
+        JsonElement e = JerseyHelper.execute(getClient(), start(), target);
         JsonArray a = e.getAsJsonArray();
         return StreamSupport.stream(a.spliterator(), false).map(JsonElement::getAsJsonObject);
     }
@@ -142,12 +138,7 @@ public class AreaClient extends AbstractJerseyClient {
             inkluder.add("vegobjekt");
         }
 
-        return inkluder.stream().collect(Collectors.joining(","));
+        return String.join(",", inkluder);
     }
-
-    private UriBuilder areaRoot() {
-        return start().path("omrader");
-    }
-
 
 }

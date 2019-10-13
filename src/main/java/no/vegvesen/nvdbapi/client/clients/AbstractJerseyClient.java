@@ -40,10 +40,10 @@ import java.util.Optional;
 
 abstract class AbstractJerseyClient {
     private final Logger log = LoggerFactory.getLogger(getClass());
-    private final String baseUrl;
+    private final HttpHost baseUrl;
     private final HttpClient client;
 
-    protected AbstractJerseyClient(String baseUrl, HttpClient client) {
+    protected AbstractJerseyClient(HttpHost baseUrl, HttpClient client) {
         this.baseUrl = baseUrl;
         this.client = client;
     }
@@ -53,7 +53,7 @@ abstract class AbstractJerseyClient {
     }
 
     protected HttpHost start() {
-        return new HttpHost(baseUrl);
+        return baseUrl;
     }
 
     protected void logEntity(Object obj) {
@@ -104,8 +104,5 @@ abstract class AbstractJerseyClient {
         return actualRel.equalsIgnoreCase(rel);
     }
 
-    public boolean isClosed() {
-        return isClosed;
-    }
 
 }
