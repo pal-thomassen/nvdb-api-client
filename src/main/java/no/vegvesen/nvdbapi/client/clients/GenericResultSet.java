@@ -27,21 +27,17 @@ package no.vegvesen.nvdbapi.client.clients;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import no.vegvesen.nvdbapi.client.clients.util.JerseyHelper;
 import no.vegvesen.nvdbapi.client.gson.GsonUtil;
 import no.vegvesen.nvdbapi.client.model.Page;
 import no.vegvesen.nvdbapi.client.model.ResultSet;
 import no.vegvesen.nvdbapi.client.util.ResultSetCollector;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.client.Invocation;
-import javax.ws.rs.client.WebTarget;
-import javax.ws.rs.core.Response;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -52,14 +48,22 @@ import java.util.stream.StreamSupport;
 public class GenericResultSet<T> implements ResultSet<T> {
     private static final Logger logger = LoggerFactory.getLogger(GenericResultSet.class);
 
-    private final WebTarget baseTarget;
+    private final HttpClient client;
+    private final HttpHost baseUrl;
+    private final ClassicRequestBuilder builder;
     private final Function<JsonObject, T> parser;
     private Page currentPage;
     private String token;
     private boolean hasNext = true;
 
-    protected GenericResultSet(WebTarget baseTarget, Page currentPage, Function<JsonObject, T> parser) {
-        this.baseTarget = baseTarget;
+    protected GenericResultSet(HttpClient client,
+                               HttpHost baseUrl,
+                               ClassicRequestBuilder builder,
+                               Page currentPage,
+                               Function<JsonObject, T> parser) {
+        this.client = client;
+        this.baseUrl = baseUrl;
+        this.builder = builder;
         this.parser = parser;
         this.currentPage = currentPage;
     }
@@ -84,21 +88,10 @@ public class GenericResultSet<T> implements ResultSet<T> {
         }
 
         // Setup and execute request
-        WebTarget actualTarget = baseTarget;
         if (currentPage != null) actualTarget = applyPage(currentPage, baseTarget);
-        logger.debug("Invoking {}", actualTarget.getUri());
-        Invocation inv = actualTarget.request().accept(JerseyHelper.MEDIA_TYPE).buildGet();
-        Response response = JerseyHelper.execute(inv, Response.class);
 
-        if (!JerseyHelper.isSuccess(response)) {
-            throw JerseyHelper.parseError(response);
-        }
 
-        JsonObject currentResponse =
-                new JsonParser()
-                        .parse(new InputStreamReader((InputStream) response.getEntity(), StandardCharsets.UTF_8))
-                        .getAsJsonObject();
-
+        JsonObject currentResponse = JerseyHelper.execute(client, baseUrl, builder).getAsJsonObject();
         int numTotal = GsonUtil.parseIntMember(currentResponse, "metadata.antall");
         int numReturned = GsonUtil.parseIntMember(currentResponse, "metadata.returnert");
 //        int numPerPage = GsonUtil.parseIntMember(currentResponse, "metadata.sidestørrelse");

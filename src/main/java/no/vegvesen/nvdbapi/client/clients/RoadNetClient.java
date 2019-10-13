@@ -33,6 +33,9 @@ import no.vegvesen.nvdbapi.client.model.roadnet.LinkSequence;
 import no.vegvesen.nvdbapi.client.model.roadnet.NetElementWrapper;
 import no.vegvesen.nvdbapi.client.model.roadnet.Node;
 import no.vegvesen.nvdbapi.client.model.roadnet.TopologyLevel;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.io.support.ClassicRequestBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,26 +47,23 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static no.vegvesen.nvdbapi.client.gson.GsonUtil.rt;
+import static org.apache.hc.core5.http.io.support.ClassicRequestBuilder.get;
 
 public class RoadNetClient extends AbstractJerseyClient {
     private static final Logger LOG = LoggerFactory.getLogger(RoadNetClient.class);
 
-    public RoadNetClient(String baseUrl, Client client) {
+    public RoadNetClient(HttpHost baseUrl, HttpClient client) {
         super(baseUrl, client);
     }
 
     public LinkSequence getLinkSequence(int id) {
-        UriBuilder path = endpoint().path("/veglenkesekvenser").path(Integer.toString(id));
-        WebTarget target = getClient().target(path);
-        JsonElement result = JerseyHelper.execute(target);
+        JsonElement result = JerseyHelper.execute(getClient(), start(), get("/vegnett/veglenkesekvenser/" + id));
 
         return rt(RoadNetParser::parseLinkSequence).apply(result.getAsJsonObject());
     }
 
     public Node getNode(int id) {
-        UriBuilder path = endpoint().path("/noder").path(Integer.toString(id));
-        WebTarget target = getClient().target(path);
-        JsonElement result = JerseyHelper.execute(target);
+        JsonElement result = JerseyHelper.execute(getClient(), start(), get("/vegnett/noder/" + id));
 
         return rt(RoadNetParser::parseNode).apply(result.getAsJsonObject());
     }
@@ -93,8 +93,7 @@ public class RoadNetClient extends AbstractJerseyClient {
     }
 
     public LinkResult getLinkSequences(RoadNetRequest request) {
-        WebTarget target = getWebTarget(request, "/veglenkesekvenser");
-        return new LinkResult(target, request.getPage());
+        return new LinkResult(getClient(), get("/vegnett//veglenkesekvenser"), request.getPage());
     }
 
     public AsyncLinkResult getLinkSequencesAsync(RoadNetRequest request) {
@@ -161,10 +160,6 @@ public class RoadNetClient extends AbstractJerseyClient {
         request.getNationalRoute().ifPresent(v -> path.queryParam("riksvegrute", v));
     }
 
-    private UriBuilder endpoint() {
-        return start().path("vegnett");
-    }
-
     public static final class AsyncLinkResult extends AsyncResult<LinkSequence> {
         AsyncLinkResult(WebTarget baseTarget, Page currentPage) {
             super(baseTarget, currentPage, rt(RoadNetParser::parseLinkSequence));
@@ -172,8 +167,8 @@ public class RoadNetClient extends AbstractJerseyClient {
     }
 
     public static final class LinkResult extends GenericResultSet<LinkSequence> {
-        LinkResult(WebTarget baseTarget, Page currentPage) {
-            super(baseTarget, currentPage, rt(RoadNetParser::parseLinkSequence));
+        LinkResult(HttpClient client, ClassicRequestBuilder builder, Page currentPage) {
+            super(client, builder, currentPage, rt(RoadNetParser::parseLinkSequence));
         }
     }
 
